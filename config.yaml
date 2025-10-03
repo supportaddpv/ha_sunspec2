@@ -1,0 +1,46 @@
+name: pySunSpec2 SunSpec Modbus Client
+version: "1.0.0"
+slug: pysunspec2
+description: SunSpec Modbus TCP/RTU client for reading solar inverters and devices
+arch:
+  - aarch64
+  - amd64
+  - armhf
+  - armv7
+  - i386
+init: false
+startup: application
+boot: auto
+hassio_api: true
+homeassistant_api: true
+host_network: true
+ports:
+  8099/tcp: 8099
+options:
+  modbus_type: "tcp"
+  modbus_host: "192.168.1.100"
+  modbus_port: 502
+  modbus_slave_id: 1
+  serial_port: "/dev/ttyUSB0"
+  serial_baudrate: 9600
+  polling_interval: 30
+  mqtt_enabled: true
+  mqtt_broker: "core-mosquitto"
+  mqtt_port: 1883
+  mqtt_username: ""
+  mqtt_password: ""
+  mqtt_topic_prefix: "sunspec"
+schema:
+  modbus_type: list(tcp|rtu)
+  modbus_host: str
+  modbus_port: port
+  modbus_slave_id: int(1,247)
+  serial_port: str?
+  serial_baudrate: int?
+  polling_interval: int(5,3600)
+  mqtt_enabled: bool
+  mqtt_broker: str
+  mqtt_port: port
+  mqtt_username: str?
+  mqtt_password: password?
+  mqtt_topic_prefix: str
