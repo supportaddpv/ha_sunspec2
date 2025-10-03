@@ -3,7 +3,6 @@ version: "1.0.0"
 slug: pysunspec2
 description: SunSpec Modbus TCP/RTU client for reading solar inverters and devices
 url: https://github.com/supportaddpv/ha_sunspec2
-image: ghcr.io/supportaddpv/ha_sunspec2-{arch}
 arch:
   - aarch64
   - amd64
