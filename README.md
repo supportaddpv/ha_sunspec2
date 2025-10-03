@@ -1,4 +1,4 @@
-# pySunSpec2 Home Assistant Add-on Repository
+# pySunSpec2 Home Assistant Add-on
 
 Home Assistant Add-on for reading SunSpec compliant devices (solar inverters, battery systems, etc.) via Modbus TCP/RTU and publishing data to MQTT.
 
