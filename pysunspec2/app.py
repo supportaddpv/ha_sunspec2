@@ -201,12 +201,115 @@ class SunSpecMQTTBridge:
 
         return data
 
+    def publish_mqtt_discovery(self, data: Dict[str, Any]):
+        """Publish MQTT Discovery configs for Home Assistant auto-detection"""
+        if not self.mqtt_client or not data:
+            return
+
+        try:
+            device_info = {
+                "identifiers": [f"sunspec_{self.config['modbus_slave_id']}"],
+                "name": f"SunSpec Device {self.config['modbus_slave_id']}",
+                "manufacturer": "SunSpec",
+                "model": "Modbus Device",
+                "sw_version": "1.0.0"
+            }
+
+            # Get manufacturer and model from common model if available
+            if 'common_0' in data:
+                common = data['common_0']
+                if 'Mn' in common:
+                    device_info['manufacturer'] = str(common['Mn'])
+                if 'Md' in common:
+                    device_info['model'] = str(common['Md'])
+                if 'SN' in common:
+                    device_info['identifiers'].append(str(common['SN']))
+
+            for model_name, model_data in data.items():
+                if not isinstance(model_data, dict):
+                    continue
+
+                for point_name, value in model_data.items():
+                    # Skip non-numeric/non-useful values
+                    if value is None or point_name in ['ID', 'L', 'DID']:
+                        continue
+
+                    # Create unique sensor ID
+                    sensor_id = f"{self.config['modbus_slave_id']}_{model_name}_{point_name}"
+
+                    # Determine sensor type and unit
+                    device_class = None
+                    unit_of_measurement = None
+                    state_class = "measurement"
+
+                    # Auto-detect based on point name
+                    point_lower = point_name.lower()
+                    if 'w' in point_lower and 'wh' not in point_lower:
+                        device_class = "power"
+                        unit_of_measurement = "W"
+                    elif 'wh' in point_lower:
+                        device_class = "energy"
+                        unit_of_measurement = "Wh"
+                        state_class = "total_increasing"
+                    elif 'a' == point_lower or point_lower.startswith('a_'):
+                        device_class = "current"
+                        unit_of_measurement = "A"
+                    elif 'v' in point_lower and 'var' not in point_lower:
+                        device_class = "voltage"
+                        unit_of_measurement = "V"
+                    elif 'hz' in point_lower:
+                        device_class = "frequency"
+                        unit_of_measurement = "Hz"
+                    elif 'tmp' in point_lower or 'temp' in point_lower:
+                        device_class = "temperature"
+                        unit_of_measurement = "°C"
+                    elif 'pf' in point_lower:
+                        device_class = "power_factor"
+                    elif 'var' in point_lower:
+                        device_class = "reactive_power"
+                        unit_of_measurement = "var"
+
+                    # Create discovery config
+                    config = {
+                        "name": f"{model_name} {point_name}",
+                        "unique_id": sensor_id,
+                        "state_topic": f"{self.config['mqtt_topic_prefix']}/{model_name}/{point_name}",
+                        "device": device_info,
+                        "availability_topic": f"{self.config['mqtt_topic_prefix']}/status",
+                        "payload_available": "online",
+                        "payload_not_available": "offline"
+                    }
+
+                    if device_class:
+                        config["device_class"] = device_class
+                    if unit_of_measurement:
+                        config["unit_of_measurement"] = unit_of_measurement
+                    if state_class:
+                        config["state_class"] = state_class
+
+                    # Publish discovery config
+                    discovery_topic = f"homeassistant/sensor/{sensor_id}/config"
+                    self.mqtt_client.publish(
+                        discovery_topic,
+                        json.dumps(config),
+                        retain=True
+                    )
+
+            logger.info("Published MQTT Discovery configs")
+
+        except Exception as e:
+            logger.error(f"Failed to publish MQTT Discovery: {e}")
+
     def publish_to_mqtt(self, data: Dict[str, Any]):
         """Publish data to MQTT"""
         if not self.mqtt_client or not data:
             return
 
         try:
+            # Publish availability
+            status_topic = f"{self.config['mqtt_topic_prefix']}/status"
+            self.mqtt_client.publish(status_topic, "online", retain=True)
+
             # Publish full data as JSON
             topic = f"{self.config['mqtt_topic_prefix']}/data"
             payload = json.dumps(data, default=str)
@@ -236,6 +339,9 @@ class SunSpecMQTTBridge:
         # Connect to MQTT
         self.connect_mqtt()
 
+        # Flag to track if discovery was published
+        discovery_published = False
+
         # Main loop
         try:
             while self.running:
@@ -246,6 +352,13 @@ class SunSpecMQTTBridge:
                     logger.info(f"Read {len(data)} models from device")
 
                     if self.config['mqtt_enabled'] and self.mqtt_client:
+                        # Publish MQTT Discovery on first successful read
+                        if not discovery_published:
+                            logger.info("Publishing MQTT Discovery configs...")
+                            self.publish_mqtt_discovery(data)
+                            discovery_published = True
+
+                        # Publish data
                         self.publish_to_mqtt(data)
                     else:
                         # Just log the data if MQTT is disabled
